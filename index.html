@@ -1,741 +1,245 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Hourly Pay Tracker — Offline</title>
-
-  <!-- Tailwind for styling -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hourly Pay Tracker</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <style>
-    /* small printable styles */
-    @media print {
-      body { -webkit-print-color-adjust: exact; }
-      .no-print { display:none !important; }
-    }
-  </style>
 </head>
-<body class="bg-slate-50 min-h-screen p-4">
-  <div class="max-w-5xl mx-auto">
-    <div class="bg-white rounded shadow p-4">
-      <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 class="text-2xl font-bold">Hourly Pay Tracker</h1>
-        <div class="text-sm text-slate-600">
-          Base: <strong>£13.85</strong> / hr &nbsp; • &nbsp; Holiday bonus: <strong>£1.67</strong> / hr
-        </div>
-      </header>
+<body class="bg-gray-100 text-gray-900">
+<div id="root" class="p-4"></div>
 
-      <!-- Tabs -->
-      <div class="no-print mb-4">
-        <nav class="flex gap-2">
-          <button id="tabCurrent" class="tab-btn bg-blue-600 text-white px-3 py-1 rounded">Current Month</button>
-          <button id="tabArchive" class="tab-btn bg-gray-100 text-slate-700 px-3 py-1 rounded">Archive Viewer</button>
-        </nav>
+<script type="text/babel">
+
+function App() {
+  const BASE_RATE = 13.85;
+  const HOLIDAY_RATE = 1.67;
+  const TOTAL_RATE = BASE_RATE + HOLIDAY_RATE;
+
+  const [tab, setTab] = React.useState("current");
+  const [employeeName, setEmployeeName] = React.useState(localStorage.getItem("employeeName") || "");
+  const [fromDate, setFromDate] = React.useState(localStorage.getItem("fromDate") || "");
+  const [toDate, setToDate] = React.useState(localStorage.getItem("toDate") || "");
+  const [entries, setEntries] = React.useState(JSON.parse(localStorage.getItem("entries") || "[]"));
+  const [archive, setArchive] = React.useState(JSON.parse(localStorage.getItem("archive") || "[]"));
+
+  React.useEffect(() => {
+    localStorage.setItem("employeeName", employeeName);
+  }, [employeeName]);
+
+  React.useEffect(() => {
+    localStorage.setItem("fromDate", fromDate);
+    localStorage.setItem("toDate", toDate);
+  }, [fromDate, toDate]);
+
+  React.useEffect(() => {
+    localStorage.setItem("entries", JSON.stringify(entries));
+  }, [entries]);
+
+  React.useEffect(() => {
+    localStorage.setItem("archive", JSON.stringify(archive));
+  }, [archive]);
+
+  const withinPayPeriod = (date) => {
+    if (!fromDate || !toDate) return true;
+    const d = new Date(date);
+    return d >= new Date(fromDate) && d <= new Date(toDate);
+  };
+
+  const addEntry = (date, clockIn, clockOut) => {
+    if (!withinPayPeriod(date)) {
+      alert("Date must be within the selected pay period");
+      return;
+    }
+    if (entries.find(e => e.date === date)) {
+      alert("Entry for this date already exists.");
+      return;
+    }
+    const ci = new Date(`1970-01-01T${clockIn}`);
+    const co = new Date(`1970-01-01T${clockOut}`);
+    let hours = (co - ci) / 36e5;
+    let breakMinutes = 0;
+    if (hours >= 10) breakMinutes = 60;
+    else if (hours >= 8) breakMinutes = 30;
+    hours -= breakMinutes / 60;
+    setEntries([...entries, { date, clockIn, clockOut, hours, breakMinutes }].sort((a, b) => new Date(a.date) - new Date(b.date)));
+  };
+
+  const deleteEntry = (date) => {
+    setEntries(entries.filter(e => e.date !== date));
+  };
+
+  const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
+  const totalBase = totalHours * BASE_RATE;
+  const totalHoliday = totalHours * HOLIDAY_RATE;
+  const totalPay = totalBase + totalHoliday;
+
+  const archiveMonth = () => {
+    if (!fromDate || !toDate) {
+      alert("Set a pay period first.");
+      return;
+    }
+    const period = `${fromDate} to ${toDate}`;
+    setArchive([...archive, { employeeName, period, entries }]);
+    setEntries([]);
+  };
+
+  const exportPDF = () => {
+    window.print();
+  };
+
+  const clearAll = () => {
+    setEmployeeName("");
+    setFromDate("");
+    setToDate("");
+    setEntries([]);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto bg-white shadow-md rounded-lg p-4">
+      <div className="flex space-x-4 mb-4">
+        <button className={`px-4 py-2 rounded ${tab === "current" ? "bg-blue-500 text-white" : "bg-gray-200"}`} onClick={() => setTab("current")}>Current Month</button>
+        <button className={`px-4 py-2 rounded ${tab === "archive" ? "bg-blue-500 text-white" : "bg-gray-200"}`} onClick={() => setTab("archive")}>Archive Viewer</button>
       </div>
 
-      <!-- Current Month Panel -->
-      <div id="panelCurrent">
-        <section class="mb-4 p-4 border rounded bg-slate-50">
-          <h2 class="font-semibold mb-3">Setup / Controls</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      {tab === "current" && (
+        <>
+          <h2 className="text-xl font-bold mb-2">Current Month — Pay Period: {fromDate && toDate ? `${fromDate} to ${toDate}` : "Not Set"}</h2>
+          <div className="mb-4">
+            <label className="block font-semibold">Employee Name</label>
+            <input type="text" value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} className="border p-2 w-full rounded"/>
+          </div>
+
+          <div className="flex space-x-4 mb-4">
             <div>
-              <label class="block text-sm font-medium">Select Month</label>
-              <input id="monthPicker" type="month" class="mt-1 block w-full rounded border p-2" />
-              <p class="text-xs text-slate-500 mt-1">Set the month you'll track. This enforces day limits.</p>
+              <label className="block font-semibold">From Date</label>
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="border p-2 rounded"/>
             </div>
-
             <div>
-              <label class="block text-sm font-medium">Date (day)</label>
-              <input id="dateInput" type="date" class="mt-1 block w-full rounded border p-2" />
-              <p class="text-xs text-slate-500 mt-1">Pick the day (must be within the selected month).</p>
+              <label className="block font-semibold">To Date</label>
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="border p-2 rounded"/>
             </div>
+          </div>
 
+          <p className="mb-4 font-semibold">Rates: Base £{BASE_RATE.toFixed(2)} | Holiday £{HOLIDAY_RATE.toFixed(2)} | Total £{TOTAL_RATE.toFixed(2)}</p>
+
+          <div className="flex space-x-4 mb-4">
             <div>
-              <label class="block text-sm font-medium">Clock In (HH:MM)</label>
-              <input id="inInput" type="time" class="mt-1 block w-full rounded border p-2" />
+              <label className="block font-semibold">Date</label>
+              <input id="date" type="date" className="border p-2 rounded"/>
             </div>
-
             <div>
-              <label class="block text-sm font-medium">Clock Out (HH:MM)</label>
-              <input id="outInput" type="time" class="mt-1 block w-full rounded border p-2" />
+              <label className="block font-semibold">Clock In</label>
+              <input id="clockIn" type="time" className="border p-2 rounded"/>
             </div>
-          </div>
-
-          <div class="flex gap-2 mt-4">
-            <button id="addBtn" class="bg-green-600 text-white px-3 py-2 rounded">Add / Save Day</button>
-            <button id="clearInputsBtn" class="bg-gray-200 px-3 py-2 rounded">Clear Inputs</button>
-            <button id="exportPdfBtn" class="bg-indigo-600 text-white px-3 py-2 rounded">Export as PDF</button>
-            <button id="archiveBtn" class="bg-amber-500 text-white px-3 py-2 rounded">Archive Month</button>
-            <button id="clearAllBtn" class="bg-red-500 text-white px-3 py-2 rounded">Clear All / Start New Month</button>
-          </div>
-
-          <p class="text-xs text-slate-500 mt-3">Break rules: if worked time ≥ 8h → 30 min break. If ≥ 10h → 60 min break. Break is shown per day.</p>
-        </section>
-
-        <section class="mb-4">
-          <h2 class="font-semibold mb-2">Entries</h2>
-          <div class="overflow-x-auto bg-white rounded border">
-            <table class="w-full text-sm">
-              <thead class="bg-gray-100 text-slate-700">
-                <tr>
-                  <th class="p-2 border">Date</th>
-                  <th class="p-2 border">In</th>
-                  <th class="p-2 border">Out</th>
-                  <th class="p-2 border">Worked (hrs)</th>
-                  <th class="p-2 border">Break</th>
-                  <th class="p-2 border">Base £</th>
-                  <th class="p-2 border">Holiday £</th>
-                  <th class="p-2 border">Day Total £</th>
-                  <th class="p-2 border no-print">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="entriesTbody">
-                <!-- rows inserted by JS -->
-              </tbody>
-              <tfoot id="totalsFoot" class="bg-gray-50 font-semibold">
-                <!-- totals inserted by JS -->
-              </tfoot>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <!-- Archive Viewer Panel (hidden by default) -->
-      <div id="panelArchive" class="hidden">
-        <section class="mb-4 p-4 border rounded bg-slate-50">
-          <h2 class="font-semibold mb-3">Archive Viewer</h2>
-          <div class="flex gap-2 mb-3">
-            <button id="refreshArchivesBtn" class="bg-slate-200 px-3 py-1 rounded">Refresh</button>
-            <button id="exportArchiveCsvBtn" class="bg-indigo-600 text-white px-3 py-1 rounded">Export Selected as CSV</button>
-            <button id="printArchiveBtn" class="bg-indigo-600 text-white px-3 py-1 rounded">Print / Save Selected as PDF</button>
-          </div>
-
-          <div class="overflow-x-auto bg-white rounded border">
-            <table class="w-full text-sm">
-              <thead class="bg-gray-100 text-slate-700">
-                <tr>
-                  <th class="p-2 border">Archive Month</th>
-                  <th class="p-2 border">Saved At</th>
-                  <th class="p-2 border">Days</th>
-                  <th class="p-2 border">Totals £</th>
-                  <th class="p-2 border no-print">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="archivesTbody">
-                <!-- archive rows -->
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section>
-          <h3 class="font-semibold mb-2">Preview / Details</h3>
-          <div id="archivePreview" class="bg-white rounded border p-3 text-sm">
-            <p class="text-slate-500">Select an archive row to preview it here.</p>
-          </div>
-        </section>
-      </div>
-
-      <footer class="mt-6 text-xs text-slate-500">
-        <p>Data stored locally in your browser (localStorage). Archives are stored there too. To keep backups, use Export as PDF or CSV.</p>
-      </footer>
-    </div>
-  </div>
-
-  <script>
-  (function () {
-    // Constants
-    const RATE_BASE = 13.85;
-    const RATE_HOLIDAY = 1.67;
-    const KEY_CURRENT = 'hpt_current_entries_v1';
-    const KEY_MONTH = 'hpt_current_month_v1';
-    const KEY_ARCHIVE = 'hpt_archives_v1';
-
-    // DOM refs
-    const tabCurrentBtn = document.getElementById('tabCurrent');
-    const tabArchiveBtn = document.getElementById('tabArchive');
-    const panelCurrent = document.getElementById('panelCurrent');
-    const panelArchive = document.getElementById('panelArchive');
-
-    const monthPicker = document.getElementById('monthPicker');
-    const dateInput = document.getElementById('dateInput');
-    const inInput = document.getElementById('inInput');
-    const outInput = document.getElementById('outInput');
-    const addBtn = document.getElementById('addBtn');
-    const clearInputsBtn = document.getElementById('clearInputsBtn');
-    const exportPdfBtn = document.getElementById('exportPdfBtn');
-    const archiveBtn = document.getElementById('archiveBtn');
-    const clearAllBtn = document.getElementById('clearAllBtn');
-
-    const entriesTbody = document.getElementById('entriesTbody');
-    const totalsFoot = document.getElementById('totalsFoot');
-
-    const refreshArchivesBtn = document.getElementById('refreshArchivesBtn');
-    const archivesTbody = document.getElementById('archivesTbody');
-    const archivePreview = document.getElementById('archivePreview');
-    const exportArchiveCsvBtn = document.getElementById('exportArchiveCsvBtn');
-    const printArchiveBtn = document.getElementById('printArchiveBtn');
-
-    // State
-    let entries = []; // array of {date, in, out, workedHours, breakMins, base, holiday, total}
-    let currentMonth = ''; // 'YYYY-MM'
-    let editingDate = null; // if editing an existing entry, the original date string
-
-    // utils
-    function saveState() {
-      localStorage.setItem(KEY_CURRENT, JSON.stringify(entries));
-      localStorage.setItem(KEY_MONTH, currentMonth || '');
-    }
-    function loadState() {
-      const raw = localStorage.getItem(KEY_CURRENT);
-      const m = localStorage.getItem(KEY_MONTH);
-      currentMonth = m || '';
-      entries = raw ? JSON.parse(raw) : [];
-    }
-    function loadArchives() {
-      const raw = localStorage.getItem(KEY_ARCHIVE);
-      return raw ? JSON.parse(raw) : [];
-    }
-    function saveArchives(list) {
-      localStorage.setItem(KEY_ARCHIVE, JSON.stringify(list));
-    }
-    function daysInMonth(year, month) {
-      // month is 1..12
-      return new Date(year, month, 0).getDate();
-    }
-    function fmtCurrency(n) {
-      return '£' + Number(n).toFixed(2);
-    }
-    function fmtHours(n) {
-      return Number(n).toFixed(2) + ' h';
-    }
-    function computeWorkedAndBreak(inTime, outTime) {
-      // expects 'HH:MM'
-      const [ih, im] = inTime.split(':').map(Number);
-      const [oh, om] = outTime.split(':').map(Number);
-      // Simple same-day calculation (no overnight support)
-      let start = new Date(2000,0,1,ih,im);
-      let end = new Date(2000,0,1,oh,om);
-      if (end <= start) return null; // invalid
-      const diffMs = end - start;
-      let hours = diffMs / (1000 * 60 * 60); // decimal hours
-      // break rule
-      let breakMins = 0;
-      if (hours >= 10) breakMins = 60;
-      else if (hours >= 8) breakMins = 30;
-      // subtract break before paying hours
-      let paidHours = Math.max(0, hours - breakMins / 60);
-      // round to 2 decimals for display & currency calc
-      paidHours = Math.round(paidHours * 100) / 100;
-      return { rawHours: Math.round(hours * 100) / 100, breakMins, paidHours };
-    }
-
-    // render
-    function renderEntries() {
-      // sort by date ascending
-      entries.sort((a,b)=> a.date.localeCompare(b.date));
-      entriesTbody.innerHTML = '';
-      let totalHours = 0, totalBase = 0, totalHoliday = 0, totalAll = 0;
-
-      if (entries.length === 0) {
-        entriesTbody.innerHTML = '<tr><td colspan="9" class="p-4 text-slate-500">No entries yet for this month.</td></tr>';
-        totalsFoot.innerHTML = '';
-        return;
-      }
-
-      entries.forEach(e => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="p-2 border">${e.date}</td>
-          <td class="p-2 border">${e.in}</td>
-          <td class="p-2 border">${e.out}</td>
-          <td class="p-2 border">${fmtHours(e.paidHours)} <span class="text-xs text-slate-500">(${e.rawHours} worked)</span></td>
-          <td class="p-2 border">${e.breakMins > 0 ? e.breakMins + ' min' + (e.breakMins >= 60 ? ' (' + (e.breakMins/60).toFixed(2) + ' h)' : '') : '<span class=\"text-slate-500\">No break taken</span>'}</td>
-          <td class="p-2 border">${fmtCurrency(e.base)}</td>
-          <td class="p-2 border">${fmtCurrency(e.holiday)}</td>
-          <td class="p-2 border">${fmtCurrency(e.total)}</td>
-          <td class="p-2 border no-print">
-            <div class="flex gap-2">
-              <button class="edit-btn bg-yellow-200 px-2 py-1 rounded" data-date="${e.date}">Edit</button>
-              <button class="del-btn bg-red-500 text-white px-2 py-1 rounded" data-date="${e.date}">Delete</button>
+            <div>
+              <label className="block font-semibold">Clock Out</label>
+              <input id="clockOut" type="time" className="border p-2 rounded"/>
             </div>
-          </td>
-        `;
-        entriesTbody.appendChild(tr);
+            <button className="bg-green-500 text-white px-4 py-2 rounded self-end" onClick={() => {
+              const date = document.getElementById("date").value;
+              const ci = document.getElementById("clockIn").value;
+              const co = document.getElementById("clockOut").value;
+              addEntry(date, ci, co);
+              document.getElementById("date").value = "";
+              document.getElementById("clockIn").value = "";
+              document.getElementById("clockOut").value = "";
+            }}>Add Entry</button>
+          </div>
 
-        totalHours += e.paidHours;
-        totalBase += e.base;
-        totalHoliday += e.holiday;
-        totalAll += e.total;
-      });
-
-      totalsFoot.innerHTML = `
-        <tr class="bg-gray-50 font-semibold">
-          <td colspan="3" class="p-2 border">Totals</td>
-          <td class="p-2 border">${fmtHours(totalHours)}</td>
-          <td class="p-2 border"></td>
-          <td class="p-2 border">${fmtCurrency(totalBase)}</td>
-          <td class="p-2 border">${fmtCurrency(totalHoliday)}</td>
-          <td class="p-2 border">${fmtCurrency(totalAll)}</td>
-          <td class="p-2 border no-print"></td>
-        </tr>
-      `;
-
-      // attach event listeners for edit/delete
-      document.querySelectorAll('.del-btn').forEach(b=>{
-        b.addEventListener('click', (ev)=>{
-          const d = ev.currentTarget.getAttribute('data-date');
-          if (!confirm('Delete entry for ' + d + '?')) return;
-          entries = entries.filter(x => x.date !== d);
-          saveState();
-          renderEntries();
-        });
-      });
-      document.querySelectorAll('.edit-btn').forEach(b=>{
-        b.addEventListener('click', (ev)=>{
-          const d = ev.currentTarget.getAttribute('data-date');
-          const e = entries.find(x=>x.date===d);
-          if (!e) return;
-          // populate inputs for editing
-          dateInput.value = e.date;
-          inInput.value = e.in;
-          outInput.value = e.out;
-          editingDate = e.date;
-          // ensure month picker matches
-          monthPicker.value = e.date.slice(0,7);
-          currentMonth = monthPicker.value;
-        });
-      });
-    }
-
-    // add or update entry
-    function addOrUpdateEntry() {
-      // require month selected
-      const monthVal = monthPicker.value;
-      if (!monthVal) { alert('Please select the month you are tracking (top-left).'); return; }
-
-      // date val must be within month
-      const d = dateInput.value;
-      if (!d) { alert('Pick a date.'); return; }
-      if (d.slice(0,7) !== monthVal) { alert('Date must be within the selected month.'); return; }
-
-      const year = parseInt(d.slice(0,4),10);
-      const mon = parseInt(d.slice(5,7),10);
-      const maxDays = daysInMonth(year, mon);
-
-      // enforce month day limit
-      if (entries.length >= maxDays && !editingDate) {
-        alert('You already have the maximum number of days for this month ('+maxDays+').');
-        return;
-      }
-
-      // no duplicate day unless editing same date
-      if (!editingDate && entries.some(e=>e.date===d)) {
-        alert('An entry already exists for that date. To modify it, click Edit on that row.');
-        return;
-      }
-
-      // time validation
-      const inT = inInput.value;
-      const outT = outInput.value;
-      if (!inT || !outT) { alert('Enter both clock in and clock out times.'); return; }
-      const computed = computeWorkedAndBreak(inT, outT);
-      if (!computed) { alert('Clock out must be after clock in and on the same day (overnight shifts not supported).'); return; }
-
-      const paidHours = computed.paidHours;
-      const base = Math.round(paidHours * RATE_BASE * 100) / 100;
-      const holiday = Math.round(paidHours * RATE_HOLIDAY * 100) / 100;
-      const total = Math.round((base + holiday) * 100) / 100;
-
-      // if editing: replace entry with same date (or allow date change but avoid duplicates)
-      if (editingDate) {
-        // if changing date to an existing different date, block
-        if (d !== editingDate && entries.some(e=>e.date===d)) {
-          alert('Cannot change to this date because another entry exists on it.');
-          return;
-        }
-        entries = entries.map(e => {
-          if (e.date === editingDate) {
-            return {
-              date: d, in: inT, out: outT, rawHours: computed.rawHours,
-              breakMins: computed.breakMins, paidHours, base, holiday, total
-            };
-          }
-          return e;
-        });
-        editingDate = null;
-      } else {
-        entries.push({
-          date: d, in: inT, out: outT, rawHours: computed.rawHours,
-          breakMins: computed.breakMins, paidHours, base, holiday, total
-        });
-      }
-
-      // ensure currentMonth set
-      currentMonth = monthVal;
-      saveState();
-      renderEntries();
-      clearInputs();
-    }
-
-    function clearInputs() {
-      dateInput.value = '';
-      inInput.value = '';
-      outInput.value = '';
-      editingDate = null;
-    }
-
-    function exportCurrentAsPDF() {
-      if (!currentMonth) { alert('No month selected or no data to export.'); return; }
-      // build printable HTML in a new window and call print()
-      const newW = window.open('', '_blank');
-      const styles = `
-        <style>
-          body{font-family:Arial,Helvetica,sans-serif;padding:20px;color:#111}
-          table{width:100%;border-collapse:collapse}
-          td,th{border:1px solid #ddd;padding:6px;text-align:left}
-          th{background:#f5f5f5}
-        </style>
-      `;
-      const rows = entries.map(e => `
-        <tr>
-          <td>${e.date}</td>
-          <td>${e.in}</td>
-          <td>${e.out}</td>
-          <td>${e.rawHours.toFixed(2)}</td>
-          <td>${e.breakMins>0 ? e.breakMins + ' min' : 'No break taken'}</td>
-          <td>${e.paidHours.toFixed(2)}</td>
-          <td>${e.base.toFixed(2)}</td>
-          <td>${e.holiday.toFixed(2)}</td>
-          <td>${e.total.toFixed(2)}</td>
-        </tr>
-      `).join('');
-      const totals = entries.reduce((acc,e)=>{
-        acc.paid += e.paidHours; acc.base += e.base; acc.hol += e.holiday; acc.tot += e.total; return acc;
-      }, {paid:0, base:0, hol:0, tot:0});
-
-      newW.document.write(`
-        <html><head><title>Hourly Archive ${currentMonth}</title>${styles}</head>
-        <body>
-          <h2>Hourly Archive — ${currentMonth}</h2>
-          <table>
-            <thead><tr>
-              <th>Date</th><th>In</th><th>Out</th><th>Worked (hrs)</th><th>Break</th><th>Paid hrs</th><th>Base £</th><th>Holiday £</th><th>Day Total £</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-            <tfoot>
-              <tr>
-                <th colspan="5">Totals</th>
-                <th>${totals.paid.toFixed(2)}</th>
-                <th>${totals.base.toFixed(2)}</th>
-                <th>${totals.hol.toFixed(2)}</th>
-                <th>${totals.tot.toFixed(2)}</th>
+          <table className="w-full border">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border p-2">Date</th>
+                <th className="border p-2">Clock In</th>
+                <th className="border p-2">Clock Out</th>
+                <th className="border p-2">Break</th>
+                <th className="border p-2">Hours</th>
+                <th className="border p-2">Base Pay</th>
+                <th className="border p-2">Holiday Pay</th>
+                <th className="border p-2">Total</th>
+                <th className="border p-2">Actions</th>
               </tr>
-            </tfoot>
+            </thead>
+            <tbody>
+              {entries.map(e => (
+                <tr key={e.date}>
+                  <td className="border p-2">{e.date}</td>
+                  <td className="border p-2">{e.clockIn}</td>
+                  <td className="border p-2">{e.clockOut}</td>
+                  <td className="border p-2">{e.breakMinutes > 0 ? `${e.breakMinutes} min` : "No break"}</td>
+                  <td className="border p-2">{e.hours.toFixed(2)}</td>
+                  <td className="border p-2">£{(e.hours * BASE_RATE).toFixed(2)}</td>
+                  <td className="border p-2">£{(e.hours * HOLIDAY_RATE).toFixed(2)}</td>
+                  <td className="border p-2">£{(e.hours * TOTAL_RATE).toFixed(2)}</td>
+                  <td className="border p-2">
+                    <button className="bg-red-500 text-white px-2 py-1 rounded" onClick={() => deleteEntry(e.date)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
-        </body></html>
-      `);
-      newW.document.close();
-      // Try to print and close (some browsers block close)
-      newW.focus();
-      setTimeout(()=> {
-        newW.print();
-        // newW.close(); // optional: some browsers prevent scripts from closing windows they didn't open
-      }, 400);
-    }
 
-    function archiveCurrentMonth() {
-      if (!currentMonth || entries.length === 0) { alert('No month selected or no entries to archive.'); return; }
-      if (!confirm('Archive this month ('+currentMonth+')? This will snapshot data and clear the current workspace.')) return;
-      const archives = loadArchives();
-      const totals = entries.reduce((acc,e)=> { acc.days +=1; acc.tot += e.total; acc.base += e.base; acc.hol += e.holiday; return acc; }, {days:0, tot:0, base:0, hol:0});
-      archives.push({
-        id: Date.now().toString(),
-        month: currentMonth,
-        createdAt: new Date().toISOString(),
-        entries: entries.slice(),
-        summary: totals
-      });
-      saveArchives(archives);
-      // clear current
-      entries = [];
-      currentMonth = '';
-      saveState();
-      renderEntries();
-      alert('Archived ' + archives[archives.length-1].month);
-      // refresh archive view if open
-      if (!panelArchive.classList.contains('hidden')) populateArchivesTable();
-    }
+          <div className="mt-4 font-bold">
+            Total Hours: {totalHours.toFixed(2)} | Base: £{totalBase.toFixed(2)} | Holiday: £{totalHoliday.toFixed(2)} | Grand Total: £{totalPay.toFixed(2)}
+          </div>
 
-    function clearAllData() {
-      if (!confirm('This will clear all current month data and reset the month selection. Are you sure?')) return;
-      entries = [];
-      currentMonth = '';
-      localStorage.removeItem(KEY_CURRENT);
-      localStorage.removeItem(KEY_MONTH);
-      renderEntries();
-      monthPicker.value = '';
-      clearInputs();
-    }
+          <div className="flex space-x-4 mt-4">
+            <button className="bg-blue-500 text-white px-4 py-2 rounded" onClick={exportPDF}>Export as PDF</button>
+            <button className="bg-yellow-500 text-white px-4 py-2 rounded" onClick={archiveMonth}>Archive Month</button>
+            <button className="bg-gray-500 text-white px-4 py-2 rounded" onClick={clearAll}>Clear All</button>
+          </div>
+        </>
+      )}
 
-    // Archive viewer functions
-    function populateArchivesTable() {
-      const archives = loadArchives();
-      archivesTbody.innerHTML = '';
-      if (archives.length === 0) {
-        archivesTbody.innerHTML = '<tr><td colspan="5" class="p-4 text-slate-500">No archives yet.</td></tr>';
-        archivePreview.innerHTML = '<p class="text-slate-500">Select an archive to preview.</p>';
-        return;
-      }
-      archives.forEach(ar => {
-        const tr = document.createElement('tr');
-        const total = (ar.summary && ar.summary.tot) ? ar.summary.tot.toFixed(2) : (ar.entries ? ar.entries.reduce((s,e)=>s+e.total,0).toFixed(2) : '0.00');
-        const days = ar.entries ? ar.entries.length : (ar.summary ? ar.summary.days : '?');
-        tr.innerHTML = `
-          <td class="p-2 border">${ar.month}</td>
-          <td class="p-2 border">${new Date(ar.createdAt).toLocaleString()}</td>
-          <td class="p-2 border">${days}</td>
-          <td class="p-2 border">${fmtCurrency(total)}</td>
-          <td class="p-2 border no-print">
-            <div class="flex gap-2">
-              <button class="view-arc bg-blue-500 text-white px-2 py-1 rounded" data-id="${ar.id}">View</button>
-              <button class="load-arc bg-emerald-500 text-white px-2 py-1 rounded" data-id="${ar.id}">Load into Current</button>
-              <button class="del-arc bg-red-500 text-white px-2 py-1 rounded" data-id="${ar.id}">Delete</button>
+      {tab === "archive" && (
+        <>
+          <h2 className="text-xl font-bold mb-4">Archived Months</h2>
+          {archive.length === 0 && <p>No archived months.</p>}
+          {archive.map((a, idx) => (
+            <div key={idx} className="border rounded p-4 mb-4">
+              <p><strong>Employee:</strong> {a.employeeName}</p>
+              <p><strong>Period:</strong> {a.period}</p>
+              <table className="w-full border mt-2">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="border p-2">Date</th>
+                    <th className="border p-2">Clock In</th>
+                    <th className="border p-2">Clock Out</th>
+                    <th className="border p-2">Break</th>
+                    <th className="border p-2">Hours</th>
+                    <th className="border p-2">Base Pay</th>
+                    <th className="border p-2">Holiday Pay</th>
+                    <th className="border p-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {a.entries.map(e => (
+                    <tr key={e.date}>
+                      <td className="border p-2">{e.date}</td>
+                      <td className="border p-2">{e.clockIn}</td>
+                      <td className="border p-2">{e.clockOut}</td>
+                      <td className="border p-2">{e.breakMinutes > 0 ? `${e.breakMinutes} min` : "No break"}</td>
+                      <td className="border p-2">{e.hours.toFixed(2)}</td>
+                      <td className="border p-2">£{(e.hours * BASE_RATE).toFixed(2)}</td>
+                      <td className="border p-2">£{(e.hours * HOLIDAY_RATE).toFixed(2)}</td>
+                      <td className="border p-2">£{(e.hours * TOTAL_RATE).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </td>
-        `;
-        archivesTbody.appendChild(tr);
-      });
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
 
-      // attach listeners
-      document.querySelectorAll('.view-arc').forEach(b=>{
-        b.addEventListener('click', (ev)=>{
-          const id = ev.currentTarget.getAttribute('data-id');
-          const arc = loadArchives().find(a=>a.id===id);
-          previewArchive(arc);
-        });
-      });
-      document.querySelectorAll('.load-arc').forEach(b=>{
-        b.addEventListener('click', (ev)=>{
-          const id = ev.currentTarget.getAttribute('data-id');
-          if (!confirm('Replace current workspace with this archive? Current unsaved data will be lost.')) return;
-          const arc = loadArchives().find(a=>a.id===id);
-          if (!arc) { alert('Archive not found'); return; }
-          // restore entries and month
-          entries = (arc.entries || []).map(e=>({
-            date: e.date, in: e.in, out: e.out, rawHours: e.rawHours, breakMins: e.breakMins, paidHours: e.paidHours,
-            base: e.base, holiday: e.holiday, total: e.total
-          }));
-          currentMonth = arc.month;
-          monthPicker.value = currentMonth;
-          saveState();
-          renderEntries();
-          alert('Loaded archive for ' + currentMonth + ' into current workspace.');
-          // switch back to Current tab
-          showCurrentTab();
-        });
-      });
-      document.querySelectorAll('.del-arc').forEach(b=>{
-        b.addEventListener('click', (ev)=>{
-          const id = ev.currentTarget.getAttribute('data-id');
-          if (!confirm('Delete this archive permanently?')) return;
-          let list = loadArchives();
-          list = list.filter(a=>a.id!==id);
-          saveArchives(list);
-          populateArchivesTable();
-          archivePreview.innerHTML = '<p class="text-slate-500">Select an archive to preview.</p>';
-        });
-      });
-    }
-
-    function previewArchive(arc) {
-      if (!arc) { archivePreview.innerHTML = '<p class="text-slate-500">Archive not found.</p>'; return; }
-      const rows = (arc.entries || []).map(e=>`
-        <tr>
-          <td class="p-1 border">${e.date}</td><td class="p-1 border">${e.in}</td><td class="p-1 border">${e.out}</td>
-          <td class="p-1 border">${e.rawHours.toFixed(2)}</td><td class="p-1 border">${e.breakMins>0 ? e.breakMins+' min' : 'No break taken'}</td>
-          <td class="p-1 border">${e.paidHours.toFixed(2)}</td><td class="p-1 border">${e.base.toFixed(2)}</td>
-          <td class="p-1 border">${e.holiday.toFixed(2)}</td><td class="p-1 border">${e.total.toFixed(2)}</td>
-        </tr>
-      `).join('');
-      const totals = (arc.entries || []).reduce((acc,e)=>{ acc.paid+=e.paidHours; acc.base+=e.base; acc.hol+=e.holiday; acc.tot+=e.total; return acc;}, {paid:0,base:0,hol:0,tot:0});
-      archivePreview.innerHTML = `
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm mb-2"><thead class="bg-gray-100"><tr>
-            <th class="p-2 border">Date</th><th class="p-2 border">In</th><th class="p-2 border">Out</th><th class="p-2 border">Worked</th>
-            <th class="p-2 border">Break</th><th class="p-2 border">Paid hrs</th><th class="p-2 border">Base £</th><th class="p-2 border">Holiday £</th><th class="p-2 border">Day Total £</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot class="bg-gray-50 font-semibold">
-            <tr><td colspan="5" class="p-2 border">Totals</td>
-            <td class="p-2 border">${totals.paid.toFixed(2)}</td>
-            <td class="p-2 border">${totals.base.toFixed(2)}</td>
-            <td class="p-2 border">${totals.hol.toFixed(2)}</td>
-            <td class="p-2 border">${totals.tot.toFixed(2)}</td>
-            </tr></tfoot></table>
-        </div>
-      `;
-    }
-
-    // CSV exporter for archive or current entries
-    function csvFromEntries(list, monthLabel) {
-      const header = ['Date','Clock In','Clock Out','Worked Hours','Break (mins)','Paid Hours','Base (£)','Holiday (£)','Total (£)'];
-      const rows = list.map(e => [
-        e.date, e.in, e.out, (e.rawHours||'').toFixed ? (e.rawHours.toFixed(2)) : e.rawHours,
-        e.breakMins || 0,
-        (e.paidHours||0).toFixed(2),
-        (e.base||0).toFixed(2),
-        (e.holiday||0).toFixed(2),
-        (e.total||0).toFixed(2)
-      ]);
-      const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\\n');
-      const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `hourly-${monthLabel||'export'}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function exportSelectedArchiveCsv() {
-      // pick selected (by preview) or alert to pick one
-      const archives = loadArchives();
-      const selectedRow = archivePreview.querySelector('table tbody tr');
-      if (!selectedRow) {
-        alert('Select an archive row from the table (click View) to export it.');
-        return;
-      }
-      // find archive by displayed month (simple approach)
-      const monthText = archivePreview.closest('section') ? archivePreview.querySelector('table')?.getAttribute('data-month') : null;
-      // fallback: use first archive ID from archivesTbody selection (we set preview via click so we can store lastPreviewId)
-      if (!lastPreviewId) { alert('No archive selected. Click View on an archive first.'); return; }
-      const arc = archives.find(a=>a.id===lastPreviewId);
-      if (!arc) { alert('Archive not found.'); return; }
-      csvFromEntries(arc.entries, arc.month);
-    }
-
-    function printSelectedArchive() {
-      if (!lastPreviewId) { alert('No archive selected. Click View on an archive first.'); return; }
-      const arc = loadArchives().find(a=>a.id===lastPreviewId);
-      if (!arc) { alert('Archive not found'); return; }
-      // build printable window similar to exportCurrentAsPDF
-      const newW = window.open('', '_blank');
-      const styles = '<style>body{font-family:Arial,Helvetica,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px}th{background:#f5f5f5}</style>';
-      const rows = (arc.entries||[]).map(e=>`
-        <tr><td>${e.date}</td><td>${e.in}</td><td>${e.out}</td><td>${e.rawHours.toFixed(2)}</td><td>${e.breakMins>0?e.breakMins+' min':'No break taken'}</td><td>${e.paidHours.toFixed(2)}</td><td>${e.base.toFixed(2)}</td><td>${e.holiday.toFixed(2)}</td><td>${e.total.toFixed(2)}</td></tr>
-      `).join('');
-      const totals = (arc.entries||[]).reduce((acc,e)=>{acc.paid+=e.paidHours;acc.base+=e.base;acc.hol+=e.holiday;acc.tot+=e.total; return acc;},{paid:0,base:0,hol:0,tot:0});
-      newW.document.write(`<html><head><title>Archive ${arc.month}</title>${styles}</head><body><h2>Archive ${arc.month}</h2><table><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Break</th><th>Paid</th><th>Base £</th><th>Holiday £</th><th>Total £</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th colspan="5">Totals</th><th>${totals.paid.toFixed(2)}</th><th>${totals.base.toFixed(2)}</th><th>${totals.hol.toFixed(2)}</th><th>${totals.tot.toFixed(2)}</th></tr></tfoot></table></body></html>`);
-      newW.document.close();
-      setTimeout(()=>{ newW.print(); }, 400);
-    }
-
-    // state for preview selection
-    let lastPreviewId = null;
-    function setLastPreview(id) { lastPreviewId = id; }
-
-    // tab handlers
-    function showCurrentTab() {
-      panelCurrent.classList.remove('hidden');
-      panelArchive.classList.add('hidden');
-      tabCurrentBtn.classList.add('bg-blue-600','text-white');
-      tabCurrentBtn.classList.remove('bg-gray-100','text-slate-700');
-      tabArchiveBtn.classList.remove('bg-blue-600','text-white');
-      tabArchiveBtn.classList.add('bg-gray-100','text-slate-700');
-    }
-    function showArchiveTab() {
-      panelCurrent.classList.add('hidden');
-      panelArchive.classList.remove('hidden');
-      tabArchiveBtn.classList.add('bg-blue-600','text-white');
-      tabArchiveBtn.classList.remove('bg-gray-100','text-slate-700');
-      tabCurrentBtn.classList.remove('bg-blue-600','text-white');
-      tabCurrentBtn.classList.add('bg-gray-100','text-slate-700');
-      populateArchivesTable();
-    }
-
-    // attach events
-    tabCurrentBtn.addEventListener('click', showCurrentTab);
-    tabArchiveBtn.addEventListener('click', showArchiveTab);
-
-    addBtn.addEventListener('click', addOrUpdateEntry);
-    clearInputsBtn.addEventListener('click', clearInputs);
-    exportPdfBtn.addEventListener('click', exportCurrentAsPDF);
-    archiveBtn.addEventListener('click', archiveCurrentMonth);
-    clearAllBtn.addEventListener('click', clearAllData);
-
-    refreshArchivesBtn.addEventListener('click', populateArchivesTable);
-    exportArchiveCsvBtn.addEventListener('click', ()=> {
-      if (!lastPreviewId) { alert('Select an archive by clicking View in the archive table first.'); return; }
-      const arc = loadArchives().find(a=>a.id===lastPreviewId);
-      if (!arc) { alert('Archive not found'); return; }
-      csvFromEntries(arc.entries, arc.month);
-    });
-    printArchiveBtn.addEventListener('click', ()=> {
-      if (!lastPreviewId) { alert('Select an archive by clicking View in the archive table first.'); return; }
-      const arc = loadArchives().find(a=>a.id===lastPreviewId);
-      if (!arc) { alert('Archive not found'); return; }
-      // print preview
-      const newW = window.open('', '_blank');
-      const styles = '<style>body{font-family:Arial,Helvetica,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px}th{background:#f5f5f5}</style>';
-      const rows = (arc.entries||[]).map(e=>`<tr><td>${e.date}</td><td>${e.in}</td><td>${e.out}</td><td>${e.rawHours.toFixed(2)}</td><td>${e.breakMins>0?e.breakMins+' min':'No break taken'}</td><td>${e.paidHours.toFixed(2)}</td><td>${e.base.toFixed(2)}</td><td>${e.holiday.toFixed(2)}</td><td>${e.total.toFixed(2)}</td></tr>`).join('');
-      const totals = (arc.entries||[]).reduce((acc,e)=>{acc.paid+=e.paidHours;acc.base+=e.base;acc.hol+=e.holiday;acc.tot+=e.total;return acc;},{paid:0,base:0,hol:0,tot:0});
-      newW.document.write(`<html><head><title>Archive ${arc.month}</title>${styles}</head><body><h2>Archive ${arc.month}</h2><table><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Break</th><th>Paid</th><th>Base £</th><th>Holiday £</th><th>Total £</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th colspan="5">Totals</th><th>${totals.paid.toFixed(2)}</th><th>${totals.base.toFixed(2)}</th><th>${totals.hol.toFixed(2)}</th><th>${totals.tot.toFixed(2)}</th></tr></tfoot></table></body></html>`);
-      newW.document.close();
-      setTimeout(()=>{ newW.print(); }, 400);
-    });
-
-    // month picker influence: when user picks a month, set currentMonth and clear entries if new month selected
-    monthPicker.addEventListener('change', ()=>{
-      const m = monthPicker.value; // YYYY-MM
-      if (!m) return;
-      // if entries exist and month differs, confirm to clear entries
-      if (entries.length > 0 && currentMonth && currentMonth !== m) {
-        if (!confirm('Change month to ' + m + '? This will clear current unsaved entries.')) {
-          monthPicker.value = currentMonth;
-          return;
-        } else {
-          entries = [];
-        }
-      }
-      currentMonth = m;
-      saveState();
-      renderEntries();
-    });
-
-    // initialization
-    loadState();
-    // if a saved month exists, set picker
-    if (localStorage.getItem(KEY_MONTH)) {
-      monthPicker.value = localStorage.getItem(KEY_MONTH);
-      currentMonth = monthPicker.value;
-    }
-    renderEntries();
-
-    // populate archive table on open archive tab if user clicked earlier
-    function initArchivesInteraction() {
-      // clicking View sets lastPreviewId
-      // but we already handle via populateArchivesTable
-      // add global handler for preview clicks to set lastPreviewId (the populate function sets it)
-      // nothing else required here
-    }
-    initArchivesInteraction();
-
-    // expose preview selection update when viewing an archive row:
-    // modify populateArchivesTable -> hook view button to set lastPreviewId and call previewArchive
-    // we've already done that above (view button sets preview). But we must also set lastPreviewId when previewing
-    const originalPreviewArchive = previewArchive;
-    previewArchive = function(arc) {
-      if (!arc) return;
-      setLastPreview(arc.id);
-      originalPreviewArchive(arc);
-    };
-
-    // small helper to ensure preview functions work (re-assign to window)
-    window.hpt_reloadArchives = populateArchivesTable;
-
-  })();
-  </script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
 </body>
 </html>
