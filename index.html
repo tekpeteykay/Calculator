@@ -1,245 +1,313 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Hourly Pay Tracker</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8">
+<title>Work Pay Calculator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    :root {
+        --primary: #2563eb;
+        --secondary: #f3f4f6;
+        --accent: #fbbf24;
+        --danger: #ef4444;
+        --radius: 8px;
+    }
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        margin: 0;
+        background: var(--secondary);
+        color: #111;
+    }
+    header {
+        background: var(--primary);
+        color: white;
+        padding: 15px;
+        text-align: center;
+        font-size: 1.4em;
+        font-weight: bold;
+    }
+    .container {
+        max-width: 1000px;
+        margin: 20px auto;
+        background: white;
+        padding: 20px;
+        border-radius: var(--radius);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .rates {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        padding: 10px;
+        border-radius: var(--radius);
+        margin-bottom: 20px;
+        font-size: 0.9em;
+    }
+    .flex {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    label {
+        font-weight: 500;
+        margin-bottom: 4px;
+        display: block;
+    }
+    input, button, select {
+        padding: 10px;
+        font-size: 1em;
+        border: 1px solid #d1d5db;
+        border-radius: var(--radius);
+        flex: 1;
+        min-width: 120px;
+    }
+    button {
+        background: var(--primary);
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    button:hover {
+        background: #1d4ed8;
+    }
+    .danger {
+        background: var(--danger);
+    }
+    .danger:hover {
+        background: #b91c1c;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+    th, td {
+        padding: 10px;
+        border-bottom: 1px solid #e5e7eb;
+        text-align: center;
+    }
+    th {
+        background: #f3f4f6;
+        font-weight: 600;
+    }
+    .totals {
+        margin-top: 20px;
+        background: #f9fafb;
+        padding: 15px;
+        border: 1px solid #e5e7eb;
+        border-radius: var(--radius);
+    }
+    @media (max-width: 700px) {
+        .flex { flex-direction: column; }
+    }
+</style>
 </head>
-<body class="bg-gray-100 text-gray-900">
-<div id="root" class="p-4"></div>
+<body>
 
-<script type="text/babel">
+<header>Work Pay Calculator</header>
 
-function App() {
-  const BASE_RATE = 13.85;
-  const HOLIDAY_RATE = 1.67;
-  const TOTAL_RATE = BASE_RATE + HOLIDAY_RATE;
+<div class="container">
 
-  const [tab, setTab] = React.useState("current");
-  const [employeeName, setEmployeeName] = React.useState(localStorage.getItem("employeeName") || "");
-  const [fromDate, setFromDate] = React.useState(localStorage.getItem("fromDate") || "");
-  const [toDate, setToDate] = React.useState(localStorage.getItem("toDate") || "");
-  const [entries, setEntries] = React.useState(JSON.parse(localStorage.getItem("entries") || "[]"));
-  const [archive, setArchive] = React.useState(JSON.parse(localStorage.getItem("archive") || "[]"));
+<div class="rates">
+    <p>💷 <b>Base Rate:</b> £13.85/hour &nbsp; | &nbsp; 🌴 <b>Holiday Pay:</b> £1.67/hour &nbsp; | &nbsp; ⏳ <b>Total Rate:</b> £15.52/hour</p>
+    <p>🍽 <b>Breaks:</b> 30 min if ≥ 8 hours, 1 hour if ≥ 10 hours (automatically deducted)</p>
+</div>
 
-  React.useEffect(() => {
-    localStorage.setItem("employeeName", employeeName);
-  }, [employeeName]);
-
-  React.useEffect(() => {
-    localStorage.setItem("fromDate", fromDate);
-    localStorage.setItem("toDate", toDate);
-  }, [fromDate, toDate]);
-
-  React.useEffect(() => {
-    localStorage.setItem("entries", JSON.stringify(entries));
-  }, [entries]);
-
-  React.useEffect(() => {
-    localStorage.setItem("archive", JSON.stringify(archive));
-  }, [archive]);
-
-  const withinPayPeriod = (date) => {
-    if (!fromDate || !toDate) return true;
-    const d = new Date(date);
-    return d >= new Date(fromDate) && d <= new Date(toDate);
-  };
-
-  const addEntry = (date, clockIn, clockOut) => {
-    if (!withinPayPeriod(date)) {
-      alert("Date must be within the selected pay period");
-      return;
-    }
-    if (entries.find(e => e.date === date)) {
-      alert("Entry for this date already exists.");
-      return;
-    }
-    const ci = new Date(`1970-01-01T${clockIn}`);
-    const co = new Date(`1970-01-01T${clockOut}`);
-    let hours = (co - ci) / 36e5;
-    let breakMinutes = 0;
-    if (hours >= 10) breakMinutes = 60;
-    else if (hours >= 8) breakMinutes = 30;
-    hours -= breakMinutes / 60;
-    setEntries([...entries, { date, clockIn, clockOut, hours, breakMinutes }].sort((a, b) => new Date(a.date) - new Date(b.date)));
-  };
-
-  const deleteEntry = (date) => {
-    setEntries(entries.filter(e => e.date !== date));
-  };
-
-  const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
-  const totalBase = totalHours * BASE_RATE;
-  const totalHoliday = totalHours * HOLIDAY_RATE;
-  const totalPay = totalBase + totalHoliday;
-
-  const archiveMonth = () => {
-    if (!fromDate || !toDate) {
-      alert("Set a pay period first.");
-      return;
-    }
-    const period = `${fromDate} to ${toDate}`;
-    setArchive([...archive, { employeeName, period, entries }]);
-    setEntries([]);
-  };
-
-  const exportPDF = () => {
-    window.print();
-  };
-
-  const clearAll = () => {
-    setEmployeeName("");
-    setFromDate("");
-    setToDate("");
-    setEntries([]);
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto bg-white shadow-md rounded-lg p-4">
-      <div className="flex space-x-4 mb-4">
-        <button className={`px-4 py-2 rounded ${tab === "current" ? "bg-blue-500 text-white" : "bg-gray-200"}`} onClick={() => setTab("current")}>Current Month</button>
-        <button className={`px-4 py-2 rounded ${tab === "archive" ? "bg-blue-500 text-white" : "bg-gray-200"}`} onClick={() => setTab("archive")}>Archive Viewer</button>
-      </div>
-
-      {tab === "current" && (
-        <>
-          <h2 className="text-xl font-bold mb-2">Current Month — Pay Period: {fromDate && toDate ? `${fromDate} to ${toDate}` : "Not Set"}</h2>
-          <div className="mb-4">
-            <label className="block font-semibold">Employee Name</label>
-            <input type="text" value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} className="border p-2 w-full rounded"/>
-          </div>
-
-          <div className="flex space-x-4 mb-4">
-            <div>
-              <label className="block font-semibold">From Date</label>
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="border p-2 rounded"/>
-            </div>
-            <div>
-              <label className="block font-semibold">To Date</label>
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="border p-2 rounded"/>
-            </div>
-          </div>
-
-          <p className="mb-4 font-semibold">Rates: Base £{BASE_RATE.toFixed(2)} | Holiday £{HOLIDAY_RATE.toFixed(2)} | Total £{TOTAL_RATE.toFixed(2)}</p>
-
-          <div className="flex space-x-4 mb-4">
-            <div>
-              <label className="block font-semibold">Date</label>
-              <input id="date" type="date" className="border p-2 rounded"/>
-            </div>
-            <div>
-              <label className="block font-semibold">Clock In</label>
-              <input id="clockIn" type="time" className="border p-2 rounded"/>
-            </div>
-            <div>
-              <label className="block font-semibold">Clock Out</label>
-              <input id="clockOut" type="time" className="border p-2 rounded"/>
-            </div>
-            <button className="bg-green-500 text-white px-4 py-2 rounded self-end" onClick={() => {
-              const date = document.getElementById("date").value;
-              const ci = document.getElementById("clockIn").value;
-              const co = document.getElementById("clockOut").value;
-              addEntry(date, ci, co);
-              document.getElementById("date").value = "";
-              document.getElementById("clockIn").value = "";
-              document.getElementById("clockOut").value = "";
-            }}>Add Entry</button>
-          </div>
-
-          <table className="w-full border">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border p-2">Date</th>
-                <th className="border p-2">Clock In</th>
-                <th className="border p-2">Clock Out</th>
-                <th className="border p-2">Break</th>
-                <th className="border p-2">Hours</th>
-                <th className="border p-2">Base Pay</th>
-                <th className="border p-2">Holiday Pay</th>
-                <th className="border p-2">Total</th>
-                <th className="border p-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map(e => (
-                <tr key={e.date}>
-                  <td className="border p-2">{e.date}</td>
-                  <td className="border p-2">{e.clockIn}</td>
-                  <td className="border p-2">{e.clockOut}</td>
-                  <td className="border p-2">{e.breakMinutes > 0 ? `${e.breakMinutes} min` : "No break"}</td>
-                  <td className="border p-2">{e.hours.toFixed(2)}</td>
-                  <td className="border p-2">£{(e.hours * BASE_RATE).toFixed(2)}</td>
-                  <td className="border p-2">£{(e.hours * HOLIDAY_RATE).toFixed(2)}</td>
-                  <td className="border p-2">£{(e.hours * TOTAL_RATE).toFixed(2)}</td>
-                  <td className="border p-2">
-                    <button className="bg-red-500 text-white px-2 py-1 rounded" onClick={() => deleteEntry(e.date)}>Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="mt-4 font-bold">
-            Total Hours: {totalHours.toFixed(2)} | Base: £{totalBase.toFixed(2)} | Holiday: £{totalHoliday.toFixed(2)} | Grand Total: £{totalPay.toFixed(2)}
-          </div>
-
-          <div className="flex space-x-4 mt-4">
-            <button className="bg-blue-500 text-white px-4 py-2 rounded" onClick={exportPDF}>Export as PDF</button>
-            <button className="bg-yellow-500 text-white px-4 py-2 rounded" onClick={archiveMonth}>Archive Month</button>
-            <button className="bg-gray-500 text-white px-4 py-2 rounded" onClick={clearAll}>Clear All</button>
-          </div>
-        </>
-      )}
-
-      {tab === "archive" && (
-        <>
-          <h2 className="text-xl font-bold mb-4">Archived Months</h2>
-          {archive.length === 0 && <p>No archived months.</p>}
-          {archive.map((a, idx) => (
-            <div key={idx} className="border rounded p-4 mb-4">
-              <p><strong>Employee:</strong> {a.employeeName}</p>
-              <p><strong>Period:</strong> {a.period}</p>
-              <table className="w-full border mt-2">
-                <thead>
-                  <tr className="bg-gray-200">
-                    <th className="border p-2">Date</th>
-                    <th className="border p-2">Clock In</th>
-                    <th className="border p-2">Clock Out</th>
-                    <th className="border p-2">Break</th>
-                    <th className="border p-2">Hours</th>
-                    <th className="border p-2">Base Pay</th>
-                    <th className="border p-2">Holiday Pay</th>
-                    <th className="border p-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {a.entries.map(e => (
-                    <tr key={e.date}>
-                      <td className="border p-2">{e.date}</td>
-                      <td className="border p-2">{e.clockIn}</td>
-                      <td className="border p-2">{e.clockOut}</td>
-                      <td className="border p-2">{e.breakMinutes > 0 ? `${e.breakMinutes} min` : "No break"}</td>
-                      <td className="border p-2">{e.hours.toFixed(2)}</td>
-                      <td className="border p-2">£{(e.hours * BASE_RATE).toFixed(2)}</td>
-                      <td className="border p-2">£{(e.hours * HOLIDAY_RATE).toFixed(2)}</td>
-                      <td className="border p-2">£{(e.hours * TOTAL_RATE).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-        </>
-      )}
+<div class="flex">
+    <div style="flex:1">
+        <label for="startDate">Start Date</label>
+        <input type="date" id="startDate">
     </div>
-  );
+    <div style="flex:1">
+        <label for="endDate">End Date</label>
+        <input type="date" id="endDate">
+    </div>
+</div>
+
+<hr>
+
+<div class="flex">
+    <div style="flex:1">
+        <label for="date">Work Date</label>
+        <input type="date" id="date">
+    </div>
+    <div style="flex:1">
+        <label for="clockIn">Clock In</label>
+        <input type="time" id="clockIn">
+    </div>
+    <div style="flex:1">
+        <label for="clockOut">Clock Out</label>
+        <input type="time" id="clockOut">
+    </div>
+    <div style="flex:1; align-self:flex-end;">
+        <button onclick="addEntry()">Add Day</button>
+    </div>
+</div>
+
+<table id="entriesTable">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Hours</th>
+            <th>Break Taken</th>
+            <th>Base Pay (£)</th>
+            <th>Holiday Pay (£)</th>
+            <th>Total (£)</th>
+            <th>Delete</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<div class="totals">
+    <p>Total Hours: <span id="totalHours">0</span></p>
+    <p>Total Base Pay: £<span id="totalBase">0.00</span></p>
+    <p>Total Holiday Pay: £<span id="totalHoliday">0.00</span></p>
+    <p><b>Grand Total: £<span id="grandTotal">0.00</span></b></p>
+</div>
+
+<div style="margin-top:15px;">
+    <button onclick="archiveMonth()">📄 Archive & Save as PDF</button>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const BASE_RATE = 13.85;
+const HOLIDAY_RATE = 1.67;
+let entries = JSON.parse(localStorage.getItem('workEntries')) || [];
+
+function saveEntries() {
+    localStorage.setItem('workEntries', JSON.stringify(entries));
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+function calculateHours(inTime, outTime) {
+    let inParts = inTime.split(":").map(Number);
+    let outParts = outTime.split(":").map(Number);
+    let inMinutes = inParts[0] * 60 + inParts[1];
+    let outMinutes = outParts[0] * 60 + outParts[1];
+    if (outMinutes <= inMinutes) outMinutes += 24 * 60; // after midnight
+    let totalHours = (outMinutes - inMinutes) / 60;
+    let breakTime = 0;
+
+    if (totalHours >= 10) { totalHours -= 1; breakTime = 1; }
+    else if (totalHours >= 8) { totalHours -= 0.5; breakTime = 0.5; }
+
+    return { totalHours, breakTime };
+}
+
+function addEntry() {
+    let startDate = document.getElementById('startDate').value;
+    let endDate = document.getElementById('endDate').value;
+    let date = document.getElementById('date').value;
+    let clockIn = document.getElementById('clockIn').value;
+    let clockOut = document.getElementById('clockOut').value;
+
+    if (!startDate || !endDate) {
+        alert("Please set the calculation timeframe first.");
+        return;
+    }
+    if (!date || !clockIn || !clockOut) {
+        alert("Please fill in all fields.");
+        return;
+    }
+    if (new Date(date) < new Date(startDate) || new Date(date) > new Date(endDate)) {
+        alert("Date must be within the selected timeframe.");
+        return;
+    }
+    if (entries.some(e => e.date === date)) {
+        alert("Entry for this date already exists.");
+        return;
+    }
+
+    let { totalHours, breakTime } = calculateHours(clockIn, clockOut);
+    let basePay = totalHours * BASE_RATE;
+    let holidayPay = totalHours * HOLIDAY_RATE;
+    let total = basePay + holidayPay;
+
+    entries.push({ date, totalHours, breakTime, basePay, holidayPay, total });
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    saveEntries();
+    renderEntries();
+
+    // Clear inputs
+    document.getElementById('date').value = "";
+    document.getElementById('clockIn').value = "";
+    document.getElementById('clockOut').value = "";
+}
+
+function deleteEntry(index) {
+    entries.splice(index, 1);
+    saveEntries();
+    renderEntries();
+}
+
+function renderEntries() {
+    let tbody = document.querySelector("#entriesTable tbody");
+    tbody.innerHTML = "";
+    let totalHours = 0, totalBase = 0, totalHoliday = 0;
+
+    entries.forEach((e, i) => {
+        totalHours += e.totalHours;
+        totalBase += e.basePay;
+        totalHoliday += e.holidayPay;
+
+        let tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${e.date}</td>
+            <td>${e.totalHours.toFixed(2)}</td>
+            <td>${(e.breakTime*60)} mins</td>
+            <td>${e.basePay.toFixed(2)}</td>
+            <td>${e.holidayPay.toFixed(2)}</td>
+            <td>${e.total.toFixed(2)}</td>
+            <td><button class="danger" onclick="deleteEntry(${i})">Delete</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('totalHours').innerText = totalHours.toFixed(2);
+    document.getElementById('totalBase').innerText = totalBase.toFixed(2);
+    document.getElementById('totalHoliday').innerText = totalHoliday.toFixed(2);
+    document.getElementById('grandTotal').innerText = (totalBase + totalHoliday).toFixed(2);
+}
+
+function archiveMonth() {
+    if (entries.length === 0) {
+        alert("No entries to archive.");
+        return;
+    }
+
+    let { jsPDF } = window.jspdf;
+    let doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text("Work Pay Archive", 14, 20);
+
+    let y = 30;
+    doc.setFontSize(10);
+    doc.text("Date | Hours | Break | Base Pay | Holiday Pay | Total", 14, y);
+    y += 10;
+
+    entries.forEach(e => {
+        doc.text(`${e.date} | ${e.totalHours.toFixed(2)} | ${(e.breakTime*60)} mins | £${e.basePay.toFixed(2)} | £${e.holidayPay.toFixed(2)} | £${e.total.toFixed(2)}`, 14, y);
+        y += 8;
+    });
+
+    y += 5;
+    doc.text(`Total Hours: ${document.getElementById('totalHours').innerText}`, 14, y); y += 6;
+    doc.text(`Total Base Pay: £${document.getElementById('totalBase').innerText}`, 14, y); y += 6;
+    doc.text(`Total Holiday Pay: £${document.getElementById('totalHoliday').innerText}`, 14, y); y += 6;
+    doc.text(`Grand Total: £${document.getElementById('grandTotal').innerText}`, 14, y);
+
+    doc.save("work_archive.pdf");
+
+    entries = [];
+    saveEntries();
+    renderEntries();
+}
+
+renderEntries();
 </script>
 </body>
 </html>
